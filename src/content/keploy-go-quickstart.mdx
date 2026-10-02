@@ -1,0 +1,407 @@
+import { Callout } from '@/components/mdx/Callout';
+import { CodeBlock } from '@/components/mdx/CodeBlock';
+import { Tabs, Tab } from '@/components/mdx/Tabs';
+import { Steps, Step } from '@/components/mdx/Steps';
+import { InteractiveArchitecture } from '@/components/mdx/InteractiveArchitecture';
+import { InteractiveTestSimulator } from '@/components/mdx/InteractiveTestSimulator';
+import { Accordion, AccordionItem } from '@/components/mdx/Accordion';
+
+# Zero-Code Testing for Go Gin & MongoDB Apps with Keploy
+
+<div className="flex flex-wrap items-center gap-3 my-4 py-2 border-y border-gray-200 dark:border-gray-800 text-xs font-mono text-gray-500 dark:text-gray-400">
+  <span className="px-2.5 py-1 rounded-md bg-keploy-500/10 text-keploy-600 dark:text-keploy-400 font-bold border border-keploy-500/20">
+    Go Quickstart
+  </span>
+  <span className="flex items-center gap-1">⏱️ 8 Min Read</span>
+  <span className="flex items-center gap-1">🎯 Beginner Friendly</span>
+  <span className="flex items-center gap-1">⚡ Keploy v2.0 (eBPF Engine)</span>
+</div>
+
+Testing microservices is notoriously painful. Writing manual unit mocks for database queries, external API calls, and gRPC endpoints consumes up to **40% of developer time**. 
+
+In this step-by-step tutorial, you'll learn how to use **Keploy**—an open-source eBPF-powered testing platform—to automatically capture network traffic from a **Go (Gin) + MongoDB** application and convert it into reproducible integration tests and mocks with **zero code modifications**.
+
+---
+
+## 1. Understanding Keploy: The Magic of eBPF
+
+Traditional integration testing requires writing mock servers, configuring test databases, and writing thousands of lines of boilerplate code. 
+
+**Keploy flips this paradigm on its head.**
+
+Instead of requiring you to install SDKs or refactor your application code, Keploy attaches probes at the **Linux kernel layer using eBPF** (Extended Berkeley Packet Filter). 
+
+### How Keploy Works:
+1. **Network Interception**: Keploy monitors socket calls between your Go process and external services (MongoDB, Postgres, Redis, HTTP APIs).
+2. **Automatic Test Generation**: When you interact with your API (via cURL, Postman, or a browser), Keploy captures the request/response pair and saves it as a human-readable **YAML test case**.
+3. **Automatic Dependency Mocking**: Keploy intercepts outgoing database wire protocols (like MongoDB's binary protocol) and records the exact responses as **YAML mocks**.
+4. **Zero-Database Test Execution**: When replaying tests, Keploy stubs database responses using recorded mocks so tests run in milliseconds without modifying real data!
+
+<InteractiveArchitecture />
+
+<Callout type="tip" title="Why eBPF Matters for Go Developers">
+Because eBPF operates at the kernel layer, Keploy requires <strong>zero changes to your Go code</strong> or <code>go.mod</code> dependencies. It works with any Go framework—Gin, Echo, Fiber, Chi, or standard <code>net/http</code>!
+</Callout>
+
+---
+
+## 2. Prerequisites
+
+Before starting, ensure you have the following installed on your machine:
+
+- **Go**: Version 1.21 or higher installed (`go version`).
+- **Docker**: Docker Desktop or Docker Engine running (`docker --version`).
+- **Linux Kernel / WSL2**: Keploy utilizes eBPF, which requires Linux kernel v5.4+ (Standard on Linux, Docker Desktop for Mac/Windows, or Windows WSL2).
+
+### Installing Keploy CLI
+
+Choose your operating system below to install the official Keploy binary:
+
+<Tabs>
+  <Tab title="Linux / WSL2">
+    <CodeBlock language="bash" filename="Terminal">
+{`curl --silent --location https://raw.githubusercontent.com/keploy/keploy/main/keploy.sh | bash`}
+    </CodeBlock>
+  </Tab>
+  <Tab title="macOS (Docker Desktop)">
+    <CodeBlock language="bash" filename="Terminal">
+{`curl --silent --location https://raw.githubusercontent.com/keploy/keploy/main/keploy.sh | bash`}
+    </CodeBlock>
+  </Tab>
+  <Tab title="Windows (PowerShell WSL2)">
+    <CodeBlock language="powershell" filename="PowerShell">
+{`wsl --exec curl --silent --location https://raw.githubusercontent.com/keploy/keploy/main/keploy.sh | bash`}
+    </CodeBlock>
+  </Tab>
+</Tabs>
+
+Verify the installation by running:
+
+<CodeBlock language="bash" filename="Terminal">
+{`keploy --version`}
+</CodeBlock>
+
+---
+
+## 3. Setting Up the Go Gin + MongoDB Application
+
+Let's build a clean, real-world Go microservice: a **URL Shortener REST API**. The application exposes two endpoints:
+- `POST /url`: Accepts a long URL and saves a shortened code to MongoDB.
+- `GET /:code`: Fetches the long URL from MongoDB and redirects the client.
+
+<Steps>
+  <Step number="1" title="Initialize the Go Project">
+    Create a new directory and initialize a Go module:
+    
+    <CodeBlock language="bash" filename="Terminal">
+{`mkdir keploy-gin-mongo && cd keploy-gin-mongo
+go mod init keploy-gin-mongo`}
+    </CodeBlock>
+  </Step>
+
+  <Step number="2" title="Install Dependencies">
+    Install Gin Web Framework and the official MongoDB Go Driver:
+
+    <CodeBlock language="bash" filename="Terminal">
+{`go get github.com/gin-gonic/gin
+go get go.mongodb.org/mongo-driver/mongo`}
+    </CodeBlock>
+  </Step>
+
+  <Step number="3" title="Create main.go">
+    Create a `main.go` file with the following complete implementation:
+
+    <CodeBlock language="go" filename="main.go">
+{`package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type URLRecord struct {
+	ID        string    \`bson:"_id" json:"id"\`
+	LongURL   string    \`bson:"url" json:"url"\`
+	ShortCode string    \`bson:"short_code" json:"short_code"\`
+	CreatedAt time.Time \`bson:"created_at" json:"created_at"\`
+}
+
+var collection *mongo.Collection
+
+func main() {
+	// Connect to MongoDB
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	mongoURI := "mongodb://localhost:27017"
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
+	if err != nil {
+		panic(err)
+	}
+
+	collection = client.Database("urlshortener").Collection("urls")
+	fmt.Println(" Connected to MongoDB successfully!")
+
+	r := gin.Default()
+
+	// 1. Shorten URL Endpoint
+	r.POST("/url", func(c *gin.Context) {
+		var body struct {
+			URL string \`json:"url" binding:"required"\`
+		}
+
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		shortCode := fmt.Sprintf("%x", time.Now().UnixNano())[:6]
+		record := URLRecord{
+			ID:        shortCode,
+			LongURL:   body.URL,
+			ShortCode: shortCode,
+			CreatedAt: time.Now(),
+		}
+
+		_, err := collection.InsertOne(c.Request.Context(), record)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save URL"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"short_code": shortCode,
+			"short_url":  "http://localhost:8080/" + shortCode,
+		})
+	})
+
+	// 2. Redirect Endpoint
+	r.GET("/:code", func(c *gin.Context) {
+		code := c.Param("code")
+		var record URLRecord
+
+		err := collection.FindOne(c.Request.Context(), bson.M{"short_code": code}).Decode(&record)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Short URL not found"})
+			return
+		}
+
+		c.Redirect(http.StatusFound, record.LongURL)
+	})
+
+	r.Run(":8080")
+}`}
+    </CodeBlock>
+  </Step>
+
+  <Step number="4" title="Start MongoDB Container">
+    Start a MongoDB instance using Docker on port 27017:
+
+    <CodeBlock language="bash" filename="Terminal">
+{`docker run -d --name mongo-keploy -p 27017:27017 mongo:latest`}
+    </CodeBlock>
+  </Step>
+</Steps>
+
+---
+
+## 4. Recording Your First Test Case (`keploy record`)
+
+Now comes the exciting part! We will start Keploy in **Record Mode**. Keploy will launch our Go application, hook into its network sockets, and silently capture API traffic.
+
+### Step 1: Start Keploy Recording
+
+In your terminal, execute:
+
+<CodeBlock language="bash" filename="Terminal">
+{`sudo keploy record -c "go run main.go"`}
+    </CodeBlock>
+
+<Callout type="info" title="Why Sudo?">
+Keploy requires root/sudo privileges because loading eBPF kernel bytecode into the Linux kernel requires the <code>CAP_SYS_ADMIN</code> or <code>CAP_BPF</code> capability.
+</Callout>
+
+You will see Keploy's ASCII banner and status output:
+
+<CodeBlock language="bash" filename="Keploy Logs">
+{`🐰 Keploy v2.0-eBPF Engine Active
+[Keploy] Info: Proxy listening on port 16789
+[Keploy] Info: Intercepting MongoDB wire protocol on port 27017
+[Gin-debug] Listening and serving HTTP on :8080`}
+</CodeBlock>
+
+### Step 2: Generate Traffic via API Calls
+
+Open a second terminal window and make a `POST` request to shorten a URL:
+
+<CodeBlock language="bash" filename="Terminal (Client)">
+{`curl -X POST http://localhost:8080/url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://github.com/keploy/keploy"}'`}
+</CodeBlock>
+
+**Expected Response:**
+<CodeBlock language="json" filename="HTTP Response">
+{`{
+  "short_code": "a1b2c3",
+  "short_url": "http://localhost:8080/a1b2c3"
+}`}
+</CodeBlock>
+
+Next, test the redirect endpoint using the `short_code` returned:
+
+<CodeBlock language="bash" filename="Terminal (Client)">
+{`curl -i http://localhost:8080/a1b2c3`}
+</CodeBlock>
+
+### Step 3: Stop Recording & Inspect Artifacts
+
+Return to the Keploy terminal window and press `Ctrl + C`. Keploy will gracefully shut down and report the captured artifacts:
+
+<CodeBlock language="bash" filename="Keploy Logs">
+{`[Keploy] Info: Captured 2 test cases!
+[Keploy] Info: Saved test case -> keploy/tests/test-1.yaml
+[Keploy] Info: Saved test case -> keploy/tests/test-2.yaml
+[Keploy] Info: Saved MongoDB mocks -> keploy/mocks/mock-1.yaml`}
+</CodeBlock>
+
+### Exploring Generated YAML Files
+
+Keploy automatically created a `keploy/` directory in your workspace. Let's look at `keploy/tests/test-1.yaml`:
+
+<CodeBlock language="yaml" filename="keploy/tests/test-1.yaml">
+{`version: api.keploy.io/v1beta1
+kind: Http
+name: test-1
+spec:
+  metadata: {}
+  req:
+    method: POST
+    proto_major: 1
+    proto_minor: 1
+    url: /url
+    header:
+      Content-Type: application/json
+    body: '{"url": "https://github.com/keploy/keploy"}'
+  resp:
+    status_code: 200
+    header:
+      Content-Type: application/json
+    body: '{"short_code":"a1b2c3","short_url":"http://localhost:8080/a1b2c3"}'
+  assertions:
+    noise:
+      - header.Date
+      - body.short_code
+  created: 1727880000`}
+</CodeBlock>
+
+<Callout type="success" title="Noise Detection">
+Notice the <code>assertions.noise</code> section? Keploy intelligently identifies dynamic values (like random hashes, timestamps, or tokens) and marks them as "noise" so test assertions don't fail during replay!
+</Callout>
+
+---
+
+## 5. Replaying & Testing With Keploy (`keploy test`)
+
+Now that test cases and MongoDB mocks are generated, let's run Keploy in **Test Mode**. 
+
+During testing:
+- Keploy starts your Go app.
+- Keploy replays the recorded HTTP requests against your endpoints.
+- **Crucially**: Keploy intercepts outgoing MongoDB calls and responds with the recorded mocks from `mock-1.yaml`!
+
+Run the test suite:
+
+<CodeBlock language="bash" filename="Terminal">
+{`sudo keploy test -c "go run main.go" --delay 5`}
+</CodeBlock>
+
+### Test Execution Output:
+
+<CodeBlock language="bash" filename="Keploy Test Runner Output">
+{`🐰 Keploy Test Execution Engine
+----------------------------------------------------------------------
+🧪 Test Suite: keploy/tests
+
+  ├─ 🟢 test-1 (POST /url) ............................. PASSED (14ms)
+  │    └─ MongoDB Mock matched: 1 insert query
+  ├─ 🟢 test-2 (GET /a1b2c3) ........................... PASSED (8ms)
+  │    └─ MongoDB Mock matched: 1 findOne query
+
+----------------------------------------------------------------------
+📊 RESULTS SUMMARY:
+  Total Test Cases : 2
+  Passed           : 2
+  Failed           : 0
+  Success Rate     : 100%
+  Code Coverage    : 87.4%
+----------------------------------------------------------------------
+🎉 ALL TEST CASES PASSED IN 0.82 SECONDS!`}
+</CodeBlock>
+
+---
+
+## 🎮 Try The Interactive Keploy Simulator Below!
+
+Experience how Keploy records and replays Go tests right inside your browser:
+
+<InteractiveTestSimulator />
+
+---
+
+## 6. Troubleshooting & Pro Tips
+
+Here are common gotchas developers encounter when running Keploy with Go applications:
+
+<Accordion>
+  <AccordionItem title="1. Permission Denied: eBPF Operation Not Permitted" defaultOpen={true}>
+    Keploy requires elevated kernel privileges to load eBPF hooks. Always run Keploy commands with <code>sudo</code> on Linux/WSL2, or ensure Docker Desktop has rootless eBPF access enabled.
+  </AccordionItem>
+
+  <AccordionItem title="2. Go App Cannot Connect to MongoDB During keploy test">
+    If your Go application attempts to connect to <code>127.0.0.1:27017</code>, ensure MongoDB container is running or let Keploy handle port redirection. If running inside Docker containers, use host networking:
+    <CodeBlock language="bash">
+{`sudo keploy record -c "docker run --net=host my-go-app"`}
+    </CodeBlock>
+  </AccordionItem>
+
+  <AccordionItem title="3. How to Ignore Dynamic Timestamp Fields in Responses?">
+    If your API returns fields like <code>created_at</code> or <code>uuid</code>, you can add them to the noise filter in <code>keploy/config.yaml</code> or directly under <code>assertions.noise</code> in the test YAML file:
+    <CodeBlock language="yaml">
+{`assertions:
+  noise:
+    - body.created_at
+    - body.id`}
+    </CodeBlock>
+  </AccordionItem>
+
+  <AccordionItem title="4. Integrating Keploy with CI/CD Pipelines (GitHub Actions)">
+    Add Keploy to your GitHub Actions workflow for zero-maintenance integration tests:
+    <CodeBlock language="yaml">
+{`- name: Run Keploy Tests
+  run: |
+    curl --silent --location https://raw.githubusercontent.com/keploy/keploy/main/keploy.sh | bash
+    sudo keploy test -c "go run main.go" --delay 10`}
+    </CodeBlock>
+  </AccordionItem>
+</Accordion>
+
+---
+
+## Conclusion
+
+With Keploy, you no longer have to spend hours writing manual database mocks or maintaining brittle test suites. 
+
+By leveraging eBPF, Keploy gives Go developers **100% automated integration test generation and dependency mocking** directly from real traffic.
+
+### Next Steps:
+- Star the [Keploy GitHub Repository](https://github.com/keploy/keploy) 🌟
+- Join the [Keploy Slack Community](https://join.slack.com/t/keploy/shared_invite/zt-275sn9p68-52x9e12056~r004c_t7uWg) 💬
+- Explore more quickstarts for [Echo](https://keploy.io/docs), [Fiber](https://keploy.io/docs), and [gRPC](https://keploy.io/docs)!
