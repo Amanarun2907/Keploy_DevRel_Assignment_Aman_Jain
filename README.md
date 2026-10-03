@@ -11,7 +11,7 @@
 [![Keploy eBPF](https://img.shields.io/badge/Keploy-v2.0_eBPF-orange?style=for-the-badge&logo=keploy)](https://keploy.io/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-[🌐 **Live Demo on Vercel**](https://vercel.com) • [📖 **Tutorial Content**](#-tutorial-overview) • [✨ **Key Features**](#-key-features--uiux-highlights) • [🛠️ **Quickstart**](#-getting-started-locally)
+[🌐 **Live Demo on Vercel**](https://keploy-dev-rel-assignment-aman-jain.vercel.app) • [📖 **Tutorial Content**](#-tutorial-overview) • [✨ **Key Features**](#-key-features--uiux-highlights) • [🛠️ **Quickstart**](#-getting-started-locally)
 
 ---
 
