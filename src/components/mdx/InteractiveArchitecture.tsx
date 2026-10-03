@@ -7,7 +7,7 @@ export const InteractiveArchitecture: React.FC = () => {
   const [mode, setMode] = useState<'record' | 'test'>('record');
 
   return (
-    <div className="my-8 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 text-white p-6 shadow-2xl relative overflow-hidden">
+    <div id="ebpf-architecture-visualizer" className="my-8 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 text-white p-6 shadow-2xl relative overflow-hidden">
       {/* Background glow effects */}
       <div className="absolute -top-24 -right-24 w-72 h-72 bg-keploy-500/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />

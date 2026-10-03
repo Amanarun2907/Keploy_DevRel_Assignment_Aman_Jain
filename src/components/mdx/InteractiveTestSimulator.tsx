@@ -85,7 +85,7 @@ export const InteractiveTestSimulator: React.FC = () => {
   };
 
   return (
-    <div className="my-8 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-950 text-gray-100 overflow-hidden shadow-2xl">
+    <div id="interactive-cli-simulator" className="my-8 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-950 text-gray-100 overflow-hidden shadow-2xl">
       {/* Header bar */}
       <div className="px-5 py-3 bg-gray-900 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
