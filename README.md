@@ -51,14 +51,21 @@ Rather than presenting static text, this application combines **MDX rendering**,
 
 ---
 
-### 3. 🔍 Instant Search Engine (`Cmd/Ctrl + K`)
+### 3. 📝 Interactive Code Snippet Controls & Workflow Steps
+> Custom styled MDX code blocks featuring window control dots, file badges, one-click copy buttons, and numbered workflow steps.
+
+![Interactive Code Snippet Steps](./public/screenshots/code-snippets.png)
+
+---
+
+### 4. 🔍 Instant Search Engine (`Cmd/Ctrl + K`)
 > Keyboard-accessible fuzzy search modal indexing headings, code examples, and technical concepts across the documentation.
 
 ![Cmd+K Search Overlay](./public/screenshots/search-modal.png)
 
 ---
 
-### 4. 📱 Mobile-First Responsive Interface
+### 5. 📱 Mobile-First Responsive Interface
 > Fully optimized UI featuring collapsible drawer navigation, readable typography, and responsive code blocks on all viewports.
 
 <div align="center">
@@ -79,6 +86,145 @@ Rather than presenting static text, this application combines **MDX rendering**,
 - 📍 **Active Table of Contents**: Real-time heading observer highlighting reading progress as you scroll.
 - ❓ **Troubleshooting Accordion**: Expandable FAQs covering eBPF kernel permissions, Docker networks, and noise filtering.
 - 🎉 **Feedback & Rating Widget**: Interactive user sentiment widget with instant confetti feedback.
+
+---
+
+## 📖 Tutorial Code Snippets & Guide Summary
+
+### 1️⃣ Installing Keploy CLI
+```bash
+# Install Keploy v2.0 (Linux / macOS / WSL2)
+curl --silent --location https://raw.githubusercontent.com/keploy/keploy/main/keploy.sh | bash
+
+# Verify binary installation
+keploy --version
+```
+
+### 2️⃣ Go (Gin) + MongoDB REST API (`main.go`)
+```go
+package main
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type URL struct {
+	ID        string `json:"id" bson:"_id"`
+	LongURL   string `json:"url" bson:"url"`
+	ShortCode string `json:"short_code" bson:"short_code"`
+}
+
+func main() {
+	r := gin.Default()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		panic(err)
+	}
+
+	collection := client.Database("url_shortener").Collection("urls")
+
+	r.POST("/url", func(c *gin.Context) {
+		var req struct {
+			URL string `json:"url" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		doc := URL{
+			ID:        "650a8f9",
+			LongURL:   req.URL,
+			ShortCode: "aB123",
+		}
+		_, err := collection.InsertOne(c.Request.Context(), doc)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save URL"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"short_url": "http://localhost:8080/" + doc.ShortCode,
+		})
+	})
+
+	r.Run(":8080")
+}
+```
+
+### 3️⃣ Recording Tests & Mocks with eBPF
+```bash
+# Launch Keploy eBPF hooks & start Go application
+keploy record -c "go run main.go"
+```
+
+Send API call via cURL:
+```bash
+curl -X POST http://localhost:8080/url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://github.com/keploy/keploy"}'
+```
+
+### 4️⃣ Automatically Generated Keploy Artifacts
+
+**`keploy/tests/test-1.yaml`** (HTTP Request/Response Test):
+```yaml
+version: api.keploy.io/v1beta1
+kind: Http
+name: test-1
+spec:
+  metadata: {}
+  req:
+    method: POST
+    url: /url
+    header:
+      Content-Type: application/json
+    body: '{"url":"https://github.com/keploy/keploy"}'
+  resp:
+    status_code: 200
+    header:
+      Content-Type: application/json
+    body: '{"short_url":"http://localhost:8080/aB123"}'
+```
+
+**`keploy/mocks/mock-1.yaml`** (MongoDB Protocol Mock):
+```yaml
+version: api.keploy.io/v1beta1
+kind: Mongo
+name: mock-1
+spec:
+  metadata:
+    type: mongo
+  requests:
+    - header:
+        op_code: 2013
+      message:
+        sections:
+          - payload:
+              body:
+                - document:
+                    insert: urls
+                    documents:
+                      - _id: 650a8f9
+                        url: "https://github.com/keploy/keploy"
+                        short_code: aB123
+```
+
+### 5️⃣ Replaying Tests Without Real Database
+```bash
+# Replay captured test suites with zero database modification
+keploy test -c "go run main.go" --delay 5
+```
 
 ---
 
@@ -163,6 +309,7 @@ node scripts/capture-screenshots.js
 │       ├── hero-light.png        # Light mode hero header
 │       ├── ebpf-architecture.png # eBPF visualizer component
 │       ├── cli-simulator.png    # In-browser CLI sandbox
+│       ├── code-snippets.png    # Interactive code block steps
 │       ├── search-modal.png     # Cmd+K search modal overlay
 │       ├── mobile-view.png      # Mobile view
 │       └── fullpage-dark.png    # Full page preview
@@ -211,6 +358,7 @@ node scripts/capture-screenshots.js
 | **Dark & Light Mode Toggle** | ✅ | Theme switcher powered by `next-themes` |
 | **High-Quality UI/UX** | ✅ | Glassmorphism, smooth animations, Cmd+K search, responsive design |
 | **Documentation Screenshots** | ✅ | High-resolution screenshots added in `public/screenshots/` and `README.md` |
+| **Code Snippets Included** | ✅ | Full code blocks for Go, Terminal CLI, and generated YAML mocks included |
 | **Clean Repo & Setup** | ✅ | Fully documented installation and deployment workflow |
 
 ---

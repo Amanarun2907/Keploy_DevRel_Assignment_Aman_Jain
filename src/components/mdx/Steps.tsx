@@ -4,7 +4,7 @@ import React from 'react';
 
 export const Steps: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <div className="my-8 space-y-6 relative before:absolute before:left-[19px] before:top-4 before:bottom-4 before:w-[2px] before:bg-gray-200 dark:before:bg-gray-800">
+    <div id="step-by-step-workflow" className="my-8 space-y-6 relative before:absolute before:left-[19px] before:top-4 before:bottom-4 before:w-[2px] before:bg-gray-200 dark:before:bg-gray-800">
       {children}
     </div>
   );

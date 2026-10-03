@@ -38,23 +38,15 @@ async function capture() {
     if (cli) {
       await cli.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
-      // Trigger recording and test replay in simulator to show active output
-      const startBtn = await cli.$('button:has-text("1. Start Recording")');
-      if (startBtn) {
-        await startBtn.click();
-        await page.waitForTimeout(500);
-        const sendBtn = await cli.$('button:has-text("2. Send Request")');
-        if (sendBtn) {
-          await sendBtn.click();
-          await page.waitForTimeout(500);
-          const replayBtn = await cli.$('button:has-text("3. Replay Test Suite")');
-          if (replayBtn) {
-            await replayBtn.click();
-            await page.waitForTimeout(500);
-          }
-        }
-      }
       await cli.screenshot({ path: path.join(outputDir, 'cli-simulator.png') });
+    }
+
+    // Step-by-Step Code Snippets
+    const steps = await page.$('#step-by-step-workflow');
+    if (steps) {
+      await steps.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+      await steps.screenshot({ path: path.join(outputDir, 'code-snippets.png') });
     }
 
     await context.close();
