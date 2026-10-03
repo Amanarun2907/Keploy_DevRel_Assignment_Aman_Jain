@@ -92,7 +92,7 @@ const components = {
   code: ({ children, className }: any) => {
     if (className) {
       const language = className.replace('language-', '');
-      return <CodeBlock code={children} language={language}>{children}</CodeBlock>;
+      return <CodeBlock language={language}>{children}</CodeBlock>;
     }
     return (
       <code className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-keploy-600 dark:text-keploy-400 text-xs font-mono border border-gray-200 dark:border-gray-700 font-medium">
@@ -103,10 +103,12 @@ const components = {
   pre: ({ children }: any) => {
     if (React.isValidElement(children)) {
       const childProps: any = children.props || {};
+      if (childProps?.type === CodeBlock) {
+        return <>{children}</>;
+      }
       if (childProps.className) {
         const language = childProps.className.replace('language-', '');
-        const code = childProps.children;
-        return <CodeBlock code={code} language={language}>{code}</CodeBlock>;
+        return <CodeBlock language={language}>{childProps.children}</CodeBlock>;
       }
     }
     return <>{children}</>;

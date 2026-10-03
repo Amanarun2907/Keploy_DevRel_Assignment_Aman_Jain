@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 
 interface CodeBlockProps {
@@ -12,33 +12,17 @@ interface CodeBlockProps {
 
 export const CodeBlock: React.FC<CodeBlockProps> = ({
   children,
-  code: directCode,
+  code,
   language = 'bash',
   filename,
 }) => {
   const [copied, setCopied] = useState(false);
-
-  // Extract raw text if children is passed from MDX pre/code tags or custom components
-  const extractCode = (node: any): string => {
-    if (node === null || node === undefined) return '';
-    if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (Array.isArray(node)) return node.map(extractCode).join('');
-    if (typeof node === 'object') {
-      if (node.props?.children) return extractCode(node.props.children);
-      if (node.props?.code) return extractCode(node.props.code);
-      if (node.value) return String(node.value);
-    }
-    return '';
-  };
-
-  const rawCode =
-    (typeof directCode === 'string' ? directCode : extractCode(directCode)) ||
-    extractCode(children);
+  const preRef = useRef<HTMLPreElement>(null);
 
   const copyToClipboard = async () => {
     try {
-      const textToCopy = rawCode.trim() || extractCode(children);
-      await navigator.clipboard.writeText(textToCopy);
+      const textToCopy = preRef.current?.innerText || (typeof code === 'string' ? code : '');
+      await navigator.clipboard.writeText(textToCopy.trim());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -46,7 +30,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
     }
   };
 
-  const displayContent = rawCode && rawCode.trim() ? rawCode.trim() : children;
+  const content = code !== undefined ? code : children;
 
   return (
     <div className="my-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-900 text-gray-100 overflow-hidden shadow-lg group">
@@ -90,8 +74,8 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
 
       {/* Code body */}
       <div className="p-4 overflow-x-auto font-mono text-sm leading-relaxed text-gray-200 selection:bg-keploy-500/30 selection:text-keploy-200">
-        <pre className="m-0">
-          <code>{displayContent}</code>
+        <pre ref={preRef} className="m-0">
+          <code>{content}</code>
         </pre>
       </div>
     </div>
