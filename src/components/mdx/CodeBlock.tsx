@@ -18,25 +18,35 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  // Extract raw text if children is passed from MDX pre code tags
+  // Extract raw text if children is passed from MDX pre/code tags or custom components
   const extractCode = (node: any): string => {
-    if (typeof node === 'string') return node;
+    if (node === null || node === undefined) return '';
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
     if (Array.isArray(node)) return node.map(extractCode).join('');
-    if (node?.props?.children) return extractCode(node.props.children);
+    if (typeof node === 'object') {
+      if (node.props?.children) return extractCode(node.props.children);
+      if (node.props?.code) return extractCode(node.props.code);
+      if (node.value) return String(node.value);
+    }
     return '';
   };
 
-  const rawCode = directCode || extractCode(children);
+  const rawCode =
+    (typeof directCode === 'string' ? directCode : extractCode(directCode)) ||
+    extractCode(children);
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(rawCode.trim());
+      const textToCopy = rawCode.trim() || extractCode(children);
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
   };
+
+  const displayContent = rawCode && rawCode.trim() ? rawCode.trim() : children;
 
   return (
     <div className="my-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-900 text-gray-100 overflow-hidden shadow-lg group">
@@ -81,7 +91,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       {/* Code body */}
       <div className="p-4 overflow-x-auto font-mono text-sm leading-relaxed text-gray-200 selection:bg-keploy-500/30 selection:text-keploy-200">
         <pre className="m-0">
-          <code>{rawCode.trim()}</code>
+          <code>{displayContent}</code>
         </pre>
       </div>
     </div>

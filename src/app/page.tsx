@@ -1,3 +1,4 @@
+import React from 'react';
 import fs from 'fs';
 import path from 'path';
 import { MDXRemote } from 'next-mdx-remote/rsc';
@@ -89,10 +90,9 @@ const components = {
     </a>
   ),
   code: ({ children, className }: any) => {
-    // If inside pre code block, handle via CodeBlock, else render inline code badge
     if (className) {
       const language = className.replace('language-', '');
-      return <CodeBlock code={children} language={language} />;
+      return <CodeBlock code={children} language={language}>{children}</CodeBlock>;
     }
     return (
       <code className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-keploy-600 dark:text-keploy-400 text-xs font-mono border border-gray-200 dark:border-gray-700 font-medium">
@@ -101,13 +101,15 @@ const components = {
     );
   },
   pre: ({ children }: any) => {
-    // Standard pre wrapper passing children to code
-    if (children?.props?.className) {
-      const language = children.props.className.replace('language-', '');
-      const code = children.props.children;
-      return <CodeBlock code={code} language={language} />;
+    if (React.isValidElement(children)) {
+      const childProps: any = children.props || {};
+      if (childProps.className) {
+        const language = childProps.className.replace('language-', '');
+        const code = childProps.children;
+        return <CodeBlock code={code} language={language}>{code}</CodeBlock>;
+      }
     }
-    return <div className="my-4">{children}</div>;
+    return <>{children}</>;
   },
   hr: () => (
     <hr className="my-8 border-gray-200 dark:border-gray-800" />
